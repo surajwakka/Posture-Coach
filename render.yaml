@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: posture-coach
+    runtime: docker
+    plan: starter   # MXNet + model needs ~1GB RAM; free (512MB) tier may OOM
+    healthCheckPath: /

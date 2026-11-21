@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Posture & Eye-Strain Coach</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#6b7686;--ok:#1f9d55;--bad:#d9480f;--ac:#2563eb}
+@media(prefers-color-scheme:dark){:root{--bg:#10141a;--card:#1a212b;--tx:#e8edf3;--mut:#93a0b1;--ok:#3ddc84;--bad:#ff8a5c;--ac:#6ea0ff}}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--tx);padding:16px;max-width:760px;margin:auto}
+h1{font-size:1.3rem}.card{background:var(--card);border-radius:14px;padding:14px;margin:12px 0}
+video{width:100%;border-radius:10px;background:#000;transform:scaleX(-1)}
+button{background:var(--ac);color:#fff;border:0;border-radius:10px;padding:12px 18px;font-size:1rem;cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.m{text-align:center}.m b{display:block;font-size:1.4rem}
+.m span{color:var(--mut);font-size:.8rem}.ok{color:var(--ok)}.bad{color:var(--bad)}
+#toast{display:none;background:var(--bad);color:#fff;padding:12px;border-radius:10px;margin:12px 0}
+</style></head><body>
+<h1>🧘 Posture & Eye-Strain Coach</h1>
+<div class="card"><video id="v" autoplay playsinline muted></video>
+<p id="status" style="color:var(--mut)">Camera is off. Frames are analysed in memory and never stored.</p>
+<button id="btn">Start coaching</button></div>
+<div id="toast"></div>
+<div class="card grid">
+<div class="m"><b id="tilt">–</b><span>Shoulder tilt (°)</span></div>
+<div class="m"><b id="dist">–</b><span>Screen closeness</span></div>
+<div class="m"><b id="head">–</b><span>Head/shoulder ratio</span></div></div>
+<div class="card" id="issues">No data yet.</div>
+<canvas id="c" width="320" height="240" hidden></canvas>
+<script>
+const $=id=>document.getElementById(id);let ws,timer,stream;
+const MSG={TILT:"Your shoulders are uneven — level them.",TOO_CLOSE:"You're too close to the screen — lean back.",SLOUCH:"You're slouching — sit tall."};
+function toast(t){const e=$("toast");e.textContent=t;e.style.display="block";setTimeout(()=>e.style.display="none",8000);
+ if(Notification.permission==="granted")new Notification("Posture Coach",{body:t});
+ try{const a=new AudioContext(),o=a.createOscillator();o.connect(a.destination);o.frequency.value=660;o.start();o.stop(a.currentTime+.2)}catch{}}
+async function start(){
+ Notification.requestPermission();
+ stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480}});$("v").srcObject=stream;
+ ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws/posture");
+ ws.onopen=()=>{$("status").textContent="Coaching active…";timer=setInterval(send,1000)};
+ ws.onmessage=e=>render(JSON.parse(e.data));
+ ws.onclose=()=>{$("status").textContent="Disconnected.";clearInterval(timer)};
+ $("btn").textContent="Stop";}
+function send(){
+ if(ws.readyState!==1||ws.bufferedAmount>0)return;
+ const c=$("c");c.getContext("2d").drawImage($("v"),0,0,320,240);
+ c.toBlob(b=>b&&ws.send(b),"image/jpeg",0.7);}
+function render(r){
+ if(r.error){$("status").textContent="Server: "+r.error;return}
+ const m=r.metrics;
+ if(!m.detected){$("issues").innerHTML="Can't see your shoulders and face — adjust the camera.";}
+ else{$("tilt").textContent=m.shoulderTiltDeg;$("dist").textContent=m.distanceIndex;$("head").textContent=m.headDropRatio;
+  $("issues").innerHTML=m.issues.length?m.issues.map(i=>`<div class="bad">⚠ ${MSG[i]}</div>`).join(""):'<span class="ok">✓ Good posture</span>';}
+ if(r.alert==="POSTURE")toast("Gentle reminder: posture check! "+(m.issues.map(i=>MSG[i]).join(" ")));
+ if(r.alert==="EYE_BREAK")toast("20-20-20: look at something 20 feet away for 20 seconds 👀");}
+$("btn").onclick=()=>{if(ws&&ws.readyState<2){ws.close();stream.getTracks().forEach(t=>t.stop());$("btn").textContent="Start coaching"}else start()};
+</script></body></html>
